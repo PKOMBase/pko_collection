@@ -64,31 +64,6 @@ public class BTree<K extends Comparable<K>, V> {
 
     }
 
-    public V get(K key) {
-        return get(root, key);
-    }
-
-    private V get(Node<K, V> node, K key) {
-        if (null == node || node.kvList.size() <= 0) {
-            return null;
-        }
-        int compareTo;
-        for (KV<K, V> kv : node.kvList) {
-            if (null == kv.key) {
-                return get(kv.childNode, key);
-            }
-            compareTo = key.compareTo(kv.key);
-            if (compareTo == 0) {
-                return kv.value;
-            } else if (compareTo < 0) {
-                return get(kv.childNode, key);
-            } else if (compareTo > 0) {
-                continue;
-            }
-        }
-        return null;
-    }
-
     static class KV<K, V> {
         public K key;
 
@@ -116,6 +91,31 @@ public class BTree<K extends Comparable<K>, V> {
 
     }
 
+    public V get(K key) {
+        return get(root, key);
+    }
+
+    private V get(Node<K, V> node, K key) {
+        if (null == node || node.kvList.size() <= 0) {
+            return null;
+        }
+        int compareTo;
+        for (KV<K, V> kv : node.kvList) {
+            if (null == kv.key) {
+                return get(kv.childNode, key);
+            }
+            compareTo = key.compareTo(kv.key);
+            if (compareTo == 0) {
+                return kv.value;
+            } else if (compareTo < 0) {
+                return get(kv.childNode, key);
+            } else if (compareTo > 0) {
+                continue;
+            }
+        }
+        return null;
+    }
+
     public void put(K key, V value) throws Exception {
         put(root, key, value);
     }
@@ -127,35 +127,29 @@ public class BTree<K extends Comparable<K>, V> {
         if (null == key) {
             throw new Exception("key is null");
         }
-        // 查询节点中的keylist
-        int compareTo;
+        // 查询该节点的keylist
         int addIndex = -1;
         KV<K, V> kv = null;
         for (int i = 0; i < node.kvList.size(); i++) {
             kv = node.kvList.get(i);
-            // tail节点
+            // 如果便利到tail
             if (null == kv.key) {
-                // 如果tail没有子节点，直接添加至tail之前
+                // 没有子节点，直接插入
                 if (null == kv.childNode) {
                     addIndex = node.kvList.size() - 1;
-                }
-                // 有子节点，递归子节点
-                else {
+                } else {
                     put(kv.childNode, key, value);
                 }
                 break;
             }
-            compareTo = key.compareTo(kv.key);
-
+            int compareTo = key.compareTo(kv.key);
             if (compareTo == 0) {
                 kv.value = value;
             } else if (compareTo < 0) {
-                // 如果没有子节点，直接添加至该节点之前
+                // 没有子节点，直接插入
                 if (null == kv.childNode) {
                     addIndex = i;
-                }
-                // 有子节点，递归子节点
-                else {
+                } else {
                     put(kv.childNode, key, value);
                 }
                 break;
@@ -164,11 +158,12 @@ public class BTree<K extends Comparable<K>, V> {
             }
         }
 
+        // 插入
         if (addIndex >= 0) {
             node.addKv(addIndex, new KV<K, V>(key, value));
-            // 平衡性操作
+            // 提升分裂
             if (node.kvList.size() >= m + 1) {
-                this.splitNode(node);
+                splitNode(node);
             }
         }
     }
@@ -177,7 +172,7 @@ public class BTree<K extends Comparable<K>, V> {
         if (null == node) {
             return;
         }
-        // 确定提升kv
+        // 确定要提升的kv
         int promoteIndex = (m - 1) / 2;
         KV<K, V> promoteKv = node.kvList.get(promoteIndex);
         if (null == promoteKv) {
@@ -188,41 +183,41 @@ public class BTree<K extends Comparable<K>, V> {
         List<KV<K, V>> leftList = new ArrayList<BTree.KV<K, V>>(node.kvList.subList(0, promoteIndex));
         List<KV<K, V>> rightList = new ArrayList<BTree.KV<K, V>>(node.kvList.subList(promoteIndex + 1,
                 node.kvList.size()));
-
         Node<K, V> leftNode = new Node<K, V>(leftList, promoteKv);
         Node<K, V> rightNode = new Node<K, V>(rightList, promoteKv);
 
+        // 提升
         Node<K, V> parentNode;
         if (null == node.parentKv) {
             List<KV<K, V>> kvList = new ArrayList<BTree.KV<K, V>>();
             kvList.add(promoteKv);
             parentNode = new Node<K, V>(kvList, null);
 
-            // 提升kv的子节点处理
+            // 被提升kv的子节点处理
             leftNode.getTailKv().childNode = promoteKv.childNode;
 
             // 父kv的childnode处理
             promoteKv.childNode = leftNode;
             parentNode.getTailKv().childNode = rightNode;
 
-            // 处理root
             root = null;// gc
             root = parentNode;
         } else {
             parentNode = node.parentKv.node;
-            // 提升节点的子节点处理
+
+            // 被提升kv的子节点处理
             leftNode.getTailKv().childNode = promoteKv.childNode;
 
-            // 父节点kv的childnode操作
+            // 父kv的childnode处理
             promoteKv.childNode = leftNode;
             parentNode.kvList.get(node.parentKv.getIndex() + 1).childNode = rightNode;
 
-            // 提升至父节点
+            // 将被提升kv插入父node
             parentNode.addKv(node.parentKv.getIndex() + 1, promoteKv);
 
-            // 父节点递归分裂
+            // 递归父节点分裂
             if (parentNode.kvList.size() >= m + 1) {
-                this.splitNode(parentNode);
+                splitNode(parentNode);
             }
         }
     }
@@ -242,7 +237,6 @@ public class BTree<K extends Comparable<K>, V> {
         bTree.put(28, "28V");
         bTree.put(20, "20V");
         bTree.put(25, "25V");
-
         System.out.println(bTree.root.toString());
 
         // System.err.println(bTree.get(15));
